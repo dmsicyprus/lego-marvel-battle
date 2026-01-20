@@ -153,5 +153,9 @@ export async function POST(request: NextRequest) {
 
 // Verify webhook
 export async function GET() {
-  return NextResponse.json({ status: "ok", bot: !!bot });
+  return NextResponse.json({
+    status: "ok",
+    bot: !!bot,
+    appUrl: appUrl,
+  });
 }
