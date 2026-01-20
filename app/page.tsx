@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Swords, Trophy, Users, Sparkles, Shield, Zap, Heart, Share2, Loader2 } from "lucide-react";
+import { Swords, Trophy, Users, Sparkles, Shield, Zap, Heart, Share2, Loader2, UserPlus, Copy, Check } from "lucide-react";
 import { LegoCharacter } from "@/components/LegoCharacter";
 import { useTelegram } from "@/contexts/TelegramContext";
 import { hapticImpact, hapticNotification, hapticSelection } from "@/lib/telegram";
@@ -49,11 +49,27 @@ interface BattleLog {
   critical?: boolean;
 }
 
+interface RoomData {
+  code: string;
+  hostId: number;
+  hostName: string;
+  hostCharId?: string;
+  guestId?: number;
+  guestName?: string;
+  guestCharId?: string;
+  status: "waiting" | "ready" | "started";
+  battleId?: string;
+}
+
 export default function Home() {
   const { user, isReady, webApp, isTelegram } = useTelegram();
-  const [screen, setScreen] = useState<"loading" | "home" | "collection" | "searching" | "battle" | "result" | "leaderboard">("loading");
+  const [screen, setScreen] = useState<"loading" | "home" | "collection" | "searching" | "battle" | "result" | "leaderboard" | "room-menu" | "room-lobby">("loading");
   const [playerData, setPlayerData] = useState<PlayerData | null>(null);
   const [selectedChar, setSelectedChar] = useState<Character | null>(null);
+  const [roomData, setRoomData] = useState<RoomData | null>(null);
+  const [joinCode, setJoinCode] = useState("");
+  const [isHost, setIsHost] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [battleState, setBattleState] = useState<{
     battleId: string;
     player: { char: Character; hp: number };
@@ -85,6 +101,32 @@ export default function Home() {
         });
         const data = await response.json();
         setPlayerData(data);
+
+        // Check for room code in URL (from invite link)
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomCode = urlParams.get("room");
+
+        if (roomCode) {
+          // Auto-join room
+          const joinResponse = await fetch("/api/game/room", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "join",
+              odingerId: user.id,
+              name: data.name,
+              code: roomCode.toUpperCase(),
+            }),
+          });
+          const joinData = await joinResponse.json();
+          if (joinData.room) {
+            setRoomData(joinData.room);
+            setIsHost(false);
+            setScreen("room-lobby");
+            return;
+          }
+        }
+
         setScreen("home");
       } catch (error) {
         console.error("Failed to init player:", error);
@@ -106,10 +148,16 @@ export default function Home() {
         webApp.BackButton.hide();
       } else if (screen === "searching") {
         cancelSearch();
+      } else if (screen === "room-menu") {
+        setScreen("home");
+        webApp.BackButton.hide();
+      } else if (screen === "room-lobby") {
+        leaveRoom();
+        setScreen("room-menu");
       }
     };
 
-    if (screen === "collection" || screen === "leaderboard" || screen === "searching") {
+    if (screen === "collection" || screen === "leaderboard" || screen === "searching" || screen === "room-menu" || screen === "room-lobby") {
       webApp.BackButton.show();
       webApp.BackButton.onClick(handleBack);
     } else {
@@ -127,6 +175,182 @@ export default function Home() {
     setScreen("collection");
     setSearchingTime(0);
   };
+
+  // ============ ROOM FUNCTIONS ============
+
+  const createRoom = async () => {
+    if (!user || !playerData) return;
+    hapticImpact("medium");
+
+    try {
+      const response = await fetch("/api/game/room", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          odingerId: user.id,
+          name: playerData.name,
+        }),
+      });
+      const data = await response.json();
+      if (data.code) {
+        setRoomData(data.room);
+        setIsHost(true);
+        setScreen("room-lobby");
+      }
+    } catch (error) {
+      console.error("Failed to create room:", error);
+    }
+  };
+
+  const joinRoomByCode = async () => {
+    if (!user || !playerData || !joinCode) return;
+    hapticImpact("medium");
+
+    try {
+      const response = await fetch("/api/game/room", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "join",
+          odingerId: user.id,
+          name: playerData.name,
+          code: joinCode.toUpperCase(),
+        }),
+      });
+      const data = await response.json();
+      if (data.room) {
+        setRoomData(data.room);
+        setIsHost(false);
+        setScreen("room-lobby");
+        hapticNotification("success");
+      } else {
+        hapticNotification("error");
+        alert(data.error || "Failed to join room");
+      }
+    } catch (error) {
+      console.error("Failed to join room:", error);
+    }
+  };
+
+  const leaveRoom = async () => {
+    if (!user) return;
+    await fetch(`/api/game/room?odingerId=${user.id}`, { method: "DELETE" });
+    setRoomData(null);
+    setSelectedChar(null);
+    setJoinCode("");
+  };
+
+  const selectCharacterForRoom = async (char: Character) => {
+    if (!user || !playerData) return;
+    hapticSelection();
+    setSelectedChar(char);
+
+    try {
+      const response = await fetch("/api/game/room", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "select_character",
+          odingerId: user.id,
+          name: playerData.name,
+          charId: char.id,
+        }),
+      });
+      const data = await response.json();
+      if (data.room) {
+        setRoomData(data.room);
+      }
+    } catch (error) {
+      console.error("Failed to select character:", error);
+    }
+  };
+
+  const startRoomBattle = async () => {
+    if (!user || !playerData || !roomData) return;
+    hapticImpact("heavy");
+
+    try {
+      const response = await fetch("/api/game/room", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "start",
+          odingerId: user.id,
+          name: playerData.name,
+        }),
+      });
+      const data = await response.json();
+      if (data.battle) {
+        const isPlayer1 = data.battle.player1.odingerId === user.id;
+        const me = isPlayer1 ? data.battle.player1 : data.battle.player2;
+        const opponent = isPlayer1 ? data.battle.player2 : data.battle.player1;
+
+        startBattle(data.battleId, {
+          name: opponent.name,
+          characterId: opponent.charId,
+          odingerId: opponent.odingerId,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to start room battle:", error);
+    }
+  };
+
+  const copyRoomCode = () => {
+    if (!roomData) return;
+    navigator.clipboard.writeText(roomData.code);
+    setCodeCopied(true);
+    hapticNotification("success");
+    setTimeout(() => setCodeCopied(false), 2000);
+  };
+
+  const shareRoomLink = () => {
+    if (!roomData || !webApp) return;
+    const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME || "LegoMarvelBattleBot";
+    const link = `https://t.me/${botUsername}?start=join_${roomData.code}`;
+    webApp.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("⚔️ Сразись со мной в LEGO Marvel Battle! Код: " + roomData.code)}`);
+  };
+
+  // Poll room status
+  useEffect(() => {
+    if (screen !== "room-lobby" || !user) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/game/room?odingerId=${user.id}`);
+        const data = await response.json();
+        if (data.code) {
+          setRoomData(data);
+          // If battle started, transition to battle
+          if (data.status === "started" && data.battleId) {
+            clearInterval(interval);
+            // Fetch battle info
+            const battleRes = await fetch(`/api/game/battle?id=${data.battleId}`);
+            const battleInfo = await battleRes.json();
+            if (battleInfo.player1 && battleInfo.player2) {
+              const isPlayer1 = battleInfo.player1.odingerId === user.id;
+              const opponent = isPlayer1 ? battleInfo.player2 : battleInfo.player1;
+              startBattle(data.battleId, {
+                name: opponent.name,
+                characterId: opponent.charId,
+                odingerId: opponent.odingerId,
+              });
+            }
+          }
+        } else if (data.status === "no_room") {
+          // Room was closed
+          clearInterval(interval);
+          setRoomData(null);
+          setScreen("room-menu");
+        }
+      } catch (error) {
+        console.error("Room poll error:", error);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [screen, user]);
 
   const startSearch = async () => {
     if (!selectedChar || !user || !playerData) return;
@@ -433,7 +657,8 @@ export default function Home() {
     }
   };
 
-  const ownedIds = playerData?.characters || ["spiderman", "hawkeye", "falcon"];
+  // For now, all characters available (serverless has no persistent memory)
+  const ownedIds = playerData?.characters?.length ? playerData.characters : characters.map(c => c.id);
 
   // LOADING SCREEN
   if (screen === "loading") {
@@ -505,6 +730,13 @@ export default function Home() {
             onClick={() => { hapticSelection(); setScreen("collection"); }}
           >
             <Swords size={22} /> FIND BATTLE
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ width: "100%", padding: "16px 24px", fontSize: 16, background: "linear-gradient(135deg, #8b5cf6, #6366f1)" }}
+            onClick={() => { hapticSelection(); setScreen("room-menu"); }}
+          >
+            <UserPlus size={20} /> PLAY WITH FRIEND
           </button>
           <button
             className="btn btn-secondary"
@@ -804,6 +1036,187 @@ export default function Home() {
             Home
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // ROOM MENU
+  if (screen === "room-menu") {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 30 }}>
+        <h2 style={{ fontSize: 32, marginBottom: 30, textAlign: "center" }}>PLAY WITH FRIEND</h2>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, width: "100%", maxWidth: 350 }}>
+          {/* Create Room */}
+          <div className="card" style={{ padding: 24 }}>
+            <h3 style={{ fontSize: 18, marginBottom: 12 }}>Create Room</h3>
+            <p style={{ color: "var(--text-secondary)", fontSize: 14, marginBottom: 16 }}>
+              Create a room and share the code with your friend
+            </p>
+            <button
+              className="btn btn-primary"
+              style={{ width: "100%" }}
+              onClick={createRoom}
+            >
+              <UserPlus size={18} /> Create Room
+            </button>
+          </div>
+
+          {/* Join Room */}
+          <div className="card" style={{ padding: 24 }}>
+            <h3 style={{ fontSize: 18, marginBottom: 12 }}>Join Room</h3>
+            <p style={{ color: "var(--text-secondary)", fontSize: 14, marginBottom: 16 }}>
+              Enter 4-letter code to join your friend
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="text"
+                placeholder="CODE"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 4))}
+                style={{
+                  flex: 1,
+                  padding: "12px 16px",
+                  fontSize: 20,
+                  fontWeight: 700,
+                  textAlign: "center",
+                  letterSpacing: 4,
+                  background: "var(--bg-secondary)",
+                  border: "2px solid rgba(255,255,255,0.1)",
+                  borderRadius: 12,
+                  color: "var(--text-primary)",
+                  textTransform: "uppercase",
+                }}
+                maxLength={4}
+              />
+              <button
+                className="btn btn-primary"
+                onClick={joinRoomByCode}
+                disabled={joinCode.length !== 4}
+                style={{ opacity: joinCode.length !== 4 ? 0.5 : 1 }}
+              >
+                Join
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ROOM LOBBY
+  if (screen === "room-lobby" && roomData) {
+    const myCharId = isHost ? roomData.hostCharId : roomData.guestCharId;
+    const opponentCharId = isHost ? roomData.guestCharId : roomData.hostCharId;
+    const opponentName = isHost ? roomData.guestName : roomData.hostName;
+    const opponentJoined = isHost ? !!roomData.guestId : true;
+    const bothReady = roomData.status === "ready";
+
+    return (
+      <div style={{ minHeight: "100vh", padding: 20 }}>
+        {/* Room Code Header */}
+        <div className="card" style={{ padding: 20, marginBottom: 20, textAlign: "center" }}>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>ROOM CODE</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+            <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: 8 }}>{roomData.code}</span>
+            <button
+              onClick={copyRoomCode}
+              style={{
+                padding: 8,
+                background: codeCopied ? "#22c55e" : "var(--bg-secondary)",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                color: "var(--text-primary)",
+              }}
+            >
+              {codeCopied ? <Check size={20} /> : <Copy size={20} />}
+            </button>
+          </div>
+          <button
+            className="btn btn-secondary"
+            style={{ marginTop: 12 }}
+            onClick={shareRoomLink}
+          >
+            <Share2 size={16} /> Share Link
+          </button>
+        </div>
+
+        {/* Players */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+          {/* You */}
+          <div className="card" style={{ padding: 16, textAlign: "center", border: "2px solid var(--accent-primary)" }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>YOU {isHost && "(Host)"}</div>
+            {myCharId ? (
+              <>
+                <LegoCharacter characterId={myCharId} size={60} animated />
+                <div style={{ fontWeight: 600, marginTop: 8 }}>{characters.find(c => c.id === myCharId)?.name}</div>
+              </>
+            ) : (
+              <div style={{ color: "var(--text-secondary)", padding: "20px 0" }}>Select hero below</div>
+            )}
+          </div>
+
+          {/* Opponent */}
+          <div className="card" style={{ padding: 16, textAlign: "center", opacity: opponentJoined ? 1 : 0.5 }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>
+              {opponentJoined ? opponentName : "Waiting..."}
+            </div>
+            {opponentJoined && opponentCharId ? (
+              <>
+                <LegoCharacter characterId={opponentCharId} size={60} animated />
+                <div style={{ fontWeight: 600, marginTop: 8 }}>{characters.find(c => c.id === opponentCharId)?.name}</div>
+              </>
+            ) : (
+              <div style={{ color: "var(--text-secondary)", padding: "20px 0" }}>
+                {opponentJoined ? "Selecting..." : "Waiting for friend..."}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Character Selection */}
+        <h3 style={{ fontSize: 18, marginBottom: 12 }}>Select Your Hero</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 8, marginBottom: 20 }}>
+          {characters.filter(c => ownedIds.includes(c.id)).map(char => (
+            <div
+              key={char.id}
+              onClick={() => selectCharacterForRoom(char)}
+              className="card"
+              style={{
+                padding: 8,
+                textAlign: "center",
+                cursor: "pointer",
+                border: myCharId === char.id ? "2px solid var(--accent-primary)" : "2px solid transparent",
+                transform: myCharId === char.id ? "scale(1.05)" : "scale(1)",
+                transition: "all 0.2s",
+              }}
+            >
+              <LegoCharacter characterId={char.id} size={40} animated={myCharId === char.id} />
+              <div style={{ fontSize: 10, marginTop: 4 }}>{char.name}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Start Button (Host only) */}
+        {isHost && (
+          <button
+            className="btn btn-primary animate-pulse-glow"
+            style={{ width: "100%", padding: "16px 24px", fontSize: 18, opacity: bothReady ? 1 : 0.5 }}
+            onClick={startRoomBattle}
+            disabled={!bothReady}
+          >
+            <Swords size={22} /> {bothReady ? "START BATTLE!" : "Waiting for both players..."}
+          </button>
+        )}
+
+        {!isHost && (
+          <div className="card" style={{ padding: 16, textAlign: "center" }}>
+            <p style={{ color: "var(--text-secondary)" }}>
+              {bothReady ? "Waiting for host to start..." : "Select your hero and wait for host"}
+            </p>
+          </div>
+        )}
       </div>
     );
   }

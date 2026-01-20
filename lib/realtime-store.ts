@@ -281,3 +281,185 @@ export function getStats() {
     activeBattles: Array.from(activeBattles.values()).filter(b => b.status !== "finished").length,
   };
 }
+
+// ============ PRIVATE ROOMS ============
+
+export interface PrivateRoom {
+  code: string;
+  hostId: number;
+  hostName: string;
+  hostCharId?: string;
+  guestId?: number;
+  guestName?: string;
+  guestCharId?: string;
+  status: "waiting" | "ready" | "started";
+  battleId?: string;
+  createdAt: Date;
+}
+
+const privateRooms = new Map<string, PrivateRoom>();
+const playerRoomMap = new Map<number, string>(); // odingerId -> roomCode
+
+function generateRoomCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 4; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+export function createRoom(hostId: number, hostName: string): PrivateRoom {
+  // Leave any existing room
+  leaveRoom(hostId);
+
+  // Generate unique code
+  let code = generateRoomCode();
+  while (privateRooms.has(code)) {
+    code = generateRoomCode();
+  }
+
+  const room: PrivateRoom = {
+    code,
+    hostId,
+    hostName,
+    status: "waiting",
+    createdAt: new Date(),
+  };
+
+  privateRooms.set(code, room);
+  playerRoomMap.set(hostId, code);
+
+  // Auto-cleanup after 10 minutes
+  setTimeout(() => {
+    if (privateRooms.get(code)?.status === "waiting") {
+      privateRooms.delete(code);
+      playerRoomMap.delete(hostId);
+    }
+  }, 600000);
+
+  return room;
+}
+
+export function getRoom(code: string): PrivateRoom | undefined {
+  return privateRooms.get(code.toUpperCase());
+}
+
+export function getPlayerRoom(odingerId: number): PrivateRoom | undefined {
+  const code = playerRoomMap.get(odingerId);
+  if (code) {
+    return privateRooms.get(code);
+  }
+  return undefined;
+}
+
+export function joinRoom(code: string, guestId: number, guestName: string): { success: boolean; room?: PrivateRoom; error?: string } {
+  const room = privateRooms.get(code.toUpperCase());
+
+  if (!room) {
+    return { success: false, error: "Room not found" };
+  }
+
+  if (room.hostId === guestId) {
+    return { success: false, error: "Cannot join your own room" };
+  }
+
+  if (room.guestId && room.guestId !== guestId) {
+    return { success: false, error: "Room is full" };
+  }
+
+  if (room.status === "started") {
+    return { success: false, error: "Battle already started" };
+  }
+
+  // Leave any existing room
+  leaveRoom(guestId);
+
+  room.guestId = guestId;
+  room.guestName = guestName;
+  playerRoomMap.set(guestId, code.toUpperCase());
+
+  return { success: true, room };
+}
+
+export function leaveRoom(odingerId: number): void {
+  const code = playerRoomMap.get(odingerId);
+  if (!code) return;
+
+  const room = privateRooms.get(code);
+  if (!room) {
+    playerRoomMap.delete(odingerId);
+    return;
+  }
+
+  if (room.hostId === odingerId) {
+    // Host leaving - destroy room
+    if (room.guestId) {
+      playerRoomMap.delete(room.guestId);
+    }
+    privateRooms.delete(code);
+    playerRoomMap.delete(odingerId);
+  } else if (room.guestId === odingerId) {
+    // Guest leaving
+    room.guestId = undefined;
+    room.guestName = undefined;
+    room.guestCharId = undefined;
+    room.status = "waiting";
+    playerRoomMap.delete(odingerId);
+  }
+}
+
+export function setRoomCharacter(odingerId: number, charId: string): PrivateRoom | undefined {
+  const code = playerRoomMap.get(odingerId);
+  if (!code) return undefined;
+
+  const room = privateRooms.get(code);
+  if (!room) return undefined;
+
+  if (room.hostId === odingerId) {
+    room.hostCharId = charId;
+  } else if (room.guestId === odingerId) {
+    room.guestCharId = charId;
+  }
+
+  // Check if both players selected characters
+  if (room.hostCharId && room.guestCharId && room.guestId) {
+    room.status = "ready";
+  }
+
+  return room;
+}
+
+export function startRoomBattle(code: string): { success: boolean; battle?: ActiveBattle; error?: string } {
+  const room = privateRooms.get(code.toUpperCase());
+
+  if (!room) {
+    return { success: false, error: "Room not found" };
+  }
+
+  if (room.status !== "ready") {
+    return { success: false, error: "Both players must select characters" };
+  }
+
+  if (!room.guestId || !room.hostCharId || !room.guestCharId) {
+    return { success: false, error: "Room not ready" };
+  }
+
+  const host = getPlayer(room.hostId);
+  const guest = getPlayer(room.guestId);
+
+  if (!host || !guest) {
+    return { success: false, error: "Players not found" };
+  }
+
+  // Create battle
+  const battle = createBattle(
+    { odingerId: room.hostId, name: room.hostName, charId: room.hostCharId, rating: host.rating },
+    { odingerId: room.guestId, name: room.guestName!, charId: room.guestCharId, rating: guest.rating }
+  );
+
+  room.status = "started";
+  room.battleId = battle.id;
+
+  return { success: true, battle };
+}

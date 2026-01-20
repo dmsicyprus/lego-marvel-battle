@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Bot, webhookCallback } from "grammy";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3200";
+const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://lego-marvel-battle.vercel.app";
 
 if (!token) {
   console.warn("TELEGRAM_BOT_TOKEN not set");
@@ -14,6 +14,31 @@ if (bot) {
   // /start command
   bot.command("start", async (ctx) => {
     const webAppUrl = appUrl;
+    const payload = ctx.match; // Get start parameter (e.g., "join_ABCD")
+
+    // Check if joining a room
+    if (payload && payload.startsWith("join_")) {
+      const roomCode = payload.replace("join_", "");
+      await ctx.reply(
+        `⚔️ *Приглашение в бой!*\n\n` +
+        `Тебя пригласили в комнату: *${roomCode}*\n\n` +
+        `Нажми кнопку ниже чтобы присоединиться!`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "⚔️ Присоединиться к бою",
+                  web_app: { url: `${webAppUrl}?room=${roomCode}` },
+                },
+              ],
+            ],
+          },
+        }
+      );
+      return;
+    }
 
     await ctx.reply(
       `⚔️ *LEGO Marvel Battle*\n\n` +
