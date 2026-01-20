@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { Bot, webhookCallback } from "grammy";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
-const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://lego-marvel-battle.vercel.app";
+
+// Ensure URL has https://
+function normalizeUrl(url: string): string {
+  if (!url) return "https://lego-marvel-battle-production.up.railway.app";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `https://${url}`;
+}
+
+const appUrl = normalizeUrl(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "");
 
 if (!token) {
   console.warn("TELEGRAM_BOT_TOKEN not set");
