@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-card: #1a1a24;
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
+  --accent-primary: #f59e0b;
+  --accent-secondary: #ef4444;
+  --tier-s: linear-gradient(135deg, #fbbf24, #f59e0b);
+  --tier-a: linear-gradient(135deg, #a855f7, #ec4899);
+  --tier-b: linear-gradient(135deg, #3b82f6, #06b6d4);
+  --tier-c: linear-gradient(135deg, #6b7280, #4b5563);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+h1, h2, h3, .hero-title {
+  font-family: 'Bangers', cursive;
+  letter-spacing: 2px;
+}
+
+/* Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(245, 158, 11, 0.6); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px) rotate(-1deg); }
+  75% { transform: translateX(5px) rotate(1deg); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Card styles */
+.card {
+  background: var(--bg-card);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* Button styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #000;
+}
+
+.btn-primary:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.5);
+}
+
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+}
+
+/* Tier badges */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.tier-s { background: var(--tier-s); color: #000; }
+.tier-a { background: var(--tier-a); color: #fff; }
+.tier-b { background: var(--tier-b); color: #fff; }
+.tier-c { background: var(--tier-c); color: #fff; }
+
+/* HP Bar */
+.hp-bar {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.hp-bar-fill {
+  height: 100%;
+  transition: width 0.5s ease;
+}
+
+.hp-high { background: linear-gradient(90deg, #22c55e, #16a34a); }
+.hp-medium { background: linear-gradient(90deg, #eab308, #ca8a04); }
+.hp-low { background: linear-gradient(90deg, #ef4444, #dc2626); }
+
+/* Rank badges */
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rank-bronze { background: #cd7f32; color: #000; }
+.rank-silver { background: #c0c0c0; color: #000; }
+.rank-gold { background: #ffd700; color: #000; }
+.rank-platinum { background: #e5e4e2; color: #000; }
+.rank-diamond { background: linear-gradient(135deg, #b9f2ff, #00bfff); color: #000; }
+.rank-master { background: linear-gradient(135deg, #ff6b6b, #ffd93d); color: #000; }
+.rank-grandmaster { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
