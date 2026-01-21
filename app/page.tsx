@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Swords, Trophy, Users, Sparkles, Shield, Zap, Heart, Share2, Loader2, UserPlus, Copy, Check } from "lucide-react";
 import { LegoCharacter } from "@/components/LegoCharacter";
+import { LegoBattleAnimation } from "@/components/LegoBattleAnimation";
 import { useTelegram } from "@/contexts/TelegramContext";
 import { hapticImpact, hapticNotification, hapticSelection } from "@/lib/telegram";
 
@@ -906,24 +907,31 @@ export default function Home() {
           <h2 style={{ fontSize: 22 }}>ROUND {battleState.round}</h2>
         </div>
 
+        {/* HTML5 Canvas Battle Animation */}
         <div style={{
-          flex: 1,
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
-          justifyContent: "space-around",
-          padding: 20,
+          padding: 16,
           background: "radial-gradient(circle at center, var(--bg-secondary) 0%, var(--bg-primary) 100%)",
-          position: "relative",
         }}>
-          {/* Player */}
-          <div style={{ textAlign: "center", zIndex: 1 }}>
-            <div style={{
-              marginBottom: 12,
-              transition: "transform 0.3s ease",
-              transform: isPlayerAttacking ? "translateX(20px) scale(1.1)" : "translateX(0)",
-            }}>
-              <LegoCharacter characterId={battleState.player.char.id} size={90} animated={isPlayerAttacking} />
-            </div>
+          <LegoBattleAnimation
+            player1CharId={battleState.player.char.id}
+            player2CharId={battleState.opponent.char.id}
+            isPlaying={!battleState.winner}
+            currentAttacker={battleState.currentAttacker}
+          />
+        </div>
+
+        {/* HP Bars */}
+        <div style={{
+          display: "flex",
+          justifyContent: "space-around",
+          padding: "12px 20px",
+          background: "var(--bg-secondary)",
+        }}>
+          {/* Player HP */}
+          <div style={{ textAlign: "center" }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{battleState.player.char.name}</div>
             <div style={{ width: 140 }}>
               <div className="hp-bar">
@@ -936,19 +944,10 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ fontSize: 48, fontWeight: 700, opacity: 0.15 }}>VS</div>
-
-          {/* Opponent */}
-          <div style={{ textAlign: "center", zIndex: 1 }}>
-            <div style={{
-              marginBottom: 12,
-              transition: "transform 0.3s ease",
-              transform: isOpponentAttacking ? "translateX(-20px) scale(1.1)" : "translateX(0) scaleX(-1)",
-            }}>
-              <LegoCharacter characterId={battleState.opponent.char.id} size={90} animated={isOpponentAttacking} />
-            </div>
+          {/* Opponent HP */}
+          <div style={{ textAlign: "center" }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{battleState.opponent.name}</div>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Rating: ???</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>Rating: ???</div>
             <div style={{ width: 140 }}>
               <div className="hp-bar">
                 <div
